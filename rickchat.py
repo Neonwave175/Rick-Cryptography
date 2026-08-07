@@ -67,6 +67,7 @@ async def main():
     async def receive():
         while True:
             data, _ = await q.get()
+            seq = None
             try:
                 if len(data) < 4:
                     raise ValueError("Packet too short")
@@ -74,18 +75,24 @@ async def main():
                 body = data[4:]
                 crypt_list = deserialize_crypt(body)
                 n = nonce_for(seed, seq)
+                print(f"\r[debug] recv seq={seq} nonce={n} seed={seed}\n> ", end="", flush=True)
                 # Run the (slow) decrypt off the event loop so it can't
                 # block processing of the next incoming/outgoing packet.
                 msg_text = await loop.run_in_executor(
                     None, decrypt, crypt_list, k1, k2, n
                 )
             except Exception as e:
-                print_line(f"[Decryption Failed: {e}]")
+                msg_text = f"[Decryption Failed: {e}]"
+
+            if seq is None:
+                # Couldn't even read a seq number -- nothing to order,
+                # just print immediately.
+                print_line(msg_text)
                 continue
 
-            # Optional: buffer + print in seq order. If you don't need
-            # strict ordering, just delete this block and always
-            # print_line(msg_text) directly.
+            # Buffer + print in seq order. Failures still occupy their
+            # slot so one bad/undecryptable packet can't permanently
+            # stall every later message behind it.
             pending[seq] = msg_text
             while state["recv_seq_expected"] in pending:
                 nxt = state["recv_seq_expected"]
@@ -102,6 +109,7 @@ async def main():
     while True:
         msg = await loop.run_in_executor(None, input, "> ")
         n = nonce_for(seed, send_seq)
+        print(f"[debug] send seq={send_seq} nonce={n} seed={seed}")
         # Run encrypt off the event loop too -- this is what was
         # letting a slow encrypt starve the receive() task before.
         encrypted_list = await loop.run_in_executor(
