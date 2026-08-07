@@ -149,7 +149,7 @@ def rick(v, s, t, i, m, ms, l):
 if __name__ == "__main__":
     mx.set_default_device(mx.cpu)
     time = never.perf_counter()
-    print(rick("Never Gonna Give You up", "Never Gonna Let You Down", 12, 3, 4, 2, 5))
+    print(rick("Never Gonna Give You up", "Never Gonna Let You Down", 24, 8, 4, 2, 128))
     elapsed = never.perf_counter()-time
     print("Time", elapsed)
     print(f"H/S = {1/elapsed}")
