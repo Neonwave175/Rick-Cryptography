@@ -121,7 +121,6 @@ async def main():
     while True:
         msg = await loop.run_in_executor(None, input, "> ")
         n = nonce_for(seed, send_seq)
-        print(f"[debug] send seq={send_seq} nonce={n} seed={seed}")
         try:
             # Run encrypt off the event loop too -- this is what was
             # letting a slow encrypt starve the receive() task before.
@@ -141,3 +140,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+debug
