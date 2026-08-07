@@ -1,8 +1,19 @@
 import asyncio
 import socket
+import traceback
+from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import mlx.core as mx
 from rickcrypt import decrypt, encrypt
+
+# rickcrypt/rick rely on a module-level global `rngseed` that is read AND
+# written by xoroshirosha128plus() throughout encrypt/decrypt. That makes
+# them non-thread-safe: if an encrypt() and a decrypt() ever run at the
+# same time on different threads (e.g. default asyncio executor, which
+# has multiple worker threads), they corrupt each other's state mid-call.
+# Routing every crypto call through this single-worker executor guarantees
+# they are always fully serialized within this process.
+crypto_executor = ThreadPoolExecutor(max_workers=1)
 
 
 def serialize_crypt(crypt_list):
@@ -78,10 +89,12 @@ async def main():
                 # Run the (slow) decrypt off the event loop so it can't
                 # block processing of the next incoming/outgoing packet.
                 msg_text = await loop.run_in_executor(
-                    None, decrypt, crypt_list, k1, k2, n
+                    crypto_executor, decrypt, crypt_list, k1, k2, n
                 )
             except Exception as e:
                 msg_text = f"[Decryption Failed: {e}]"
+                print(f"\n[!] decrypt failed on seq={seq}:")
+                traceback.print_exc()
 
             if seq is None:
                 # Couldn't even read a seq number -- nothing to order,
@@ -109,13 +122,20 @@ async def main():
         msg = await loop.run_in_executor(None, input, "> ")
         n = nonce_for(seed, send_seq)
         print(f"[debug] send seq={send_seq} nonce={n} seed={seed}")
-        # Run encrypt off the event loop too -- this is what was
-        # letting a slow encrypt starve the receive() task before.
-        encrypted_list = await loop.run_in_executor(
-            None, encrypt, msg, k1, k2, n
-        )
-        payload = send_seq.to_bytes(4, 'little') + serialize_crypt(encrypted_list)
-        s.sendto(payload, (peer_ip, peer_port))
+        try:
+            # Run encrypt off the event loop too -- this is what was
+            # letting a slow encrypt starve the receive() task before.
+            encrypted_list = await loop.run_in_executor(
+                crypto_executor, encrypt, msg, k1, k2, n
+            )
+            payload = send_seq.to_bytes(4, 'little') + serialize_crypt(encrypted_list)
+            s.sendto(payload, (peer_ip, peer_port))
+        except Exception:
+            print(f"[!] encrypt/send failed on seq={send_seq}:")
+            traceback.print_exc()
+            # Don't advance send_seq on failure -- keep sender/receiver
+            # sequence numbering in sync, and let you retry the message.
+            continue
         send_seq += 1
 
 
