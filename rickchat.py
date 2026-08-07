@@ -75,7 +75,6 @@ async def main():
                 body = data[4:]
                 crypt_list = deserialize_crypt(body)
                 n = nonce_for(seed, seq)
-                print(f"\r[debug] recv seq={seq} nonce={n} seed={seed}\n> ", end="", flush=True)
                 # Run the (slow) decrypt off the event loop so it can't
                 # block processing of the next incoming/outgoing packet.
                 msg_text = await loop.run_in_executor(
