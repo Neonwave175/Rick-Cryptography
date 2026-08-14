@@ -17,12 +17,16 @@ import mlx.core as mx
 import numpy as np
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
-from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
-
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
+from cryptography.hazmat.primitives.asymmetric.x25519 import (
+    X25519PrivateKey,
+    X25519PublicKey,
+)
 from rickcrypt import decrypt, encrypt
 
-# Serializes rickcrypt calls to prevent module-level global state corruption
 crypto_executor = ThreadPoolExecutor(max_workers=1)
 
 PKT_HANDSHAKE = 0x01
