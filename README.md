@@ -20,7 +20,6 @@ Read more in the /docs/RickPoW.md
 ## RickCrypt
 This is a encryption algorithm that uses RickPoW to generate the origin matrix and them uses ARX to generate the key stream.
 It puts the input value into chunks then xors each value with the output array of the ARX like Xchacha
-
 Then it returns matrixes as the output
 
 Since this uses 2xRickPoW to generate the origin array, the generation of the origin array is slow.
