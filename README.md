@@ -20,15 +20,18 @@ Read more in the /docs/RickPoW.md
 ## RickCrypt
 This is a encryption algorithm that uses RickPoW to generate the origin matrix and them uses ARX to generate the key stream.
 It puts the input value into chunks then xors each value with the output array of the ARX like Xchacha
+
 Then it returns matrixes as the output
 
 Since this uses 2xRickPoW to generate the origin array, the generation of the origin array is slow.
 This is delebrate to reduce brute forcing
+
 Read more at /docs/RickCrypt.md
 
 ## RickChat
 This is a rick based chatting app that is based of UDP so there is no Client<->Server<->Client, only Peer<->Peer to reduce vulnarabilities
 It uses rick crypt so is very slow (3-6 seconds per message on Lo in a MacBook Pro M4 Max) but depending on the use case, this can be adjusted by changing the settings in RickCrypt
+
 Read more at /docs/RickChat.md
 
 
