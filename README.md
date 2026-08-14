@@ -6,8 +6,8 @@ A argon2 inspired hashing algorithm written in python
 This thing is built to be as slow as possible
 
 Performance results (calculated on a M4 Max with a 14 core CPU and 32 core GPU)
-|CPU h/s|GPU h/s|Settings|
-|-------|--------|--------|
+|CPU h/s|GPU h/s|Settings|Comments|
+|-------|--------|--------|--------|
 |23.42|10.0|12:3:4:2|
 |17.43|7.11|12:3:128:2|
 |0.02|0.02|12:3:51200:96|
