@@ -172,16 +172,22 @@ async def main():
         transport.sendto(data, (peer_ip, peer_port))
 
     # --- Handshake Phase ---
+    handshake_pkt = bytes([PKT_HANDSHAKE]) + identity_pub + eph_pub + eph_sig
+    handshake_done = asyncio.Event()
+
+    # Background task to continuously ping the peer so we don't stall their UI
+    async def handshake_sender():
+        while not handshake_done.is_set():
+            sendto_peer(handshake_pkt)
+            await asyncio.sleep(1.0)
+
+    bg_sender = asyncio.create_task(handshake_sender())
+
     print("[+] Waiting for peer handshake...")
     peer_identity_pub, peer_eph_pub = None, None
 
     while not peer_identity_pub:
-        sendto_peer(bytes([PKT_HANDSHAKE]) + identity_pub + eph_pub + eph_sig)
-        try:
-            data = await asyncio.wait_for(q.get(), timeout=1.0)
-        except asyncio.TimeoutError:
-            continue
-
+        data = await q.get()
         if not data or data[0] != PKT_HANDSHAKE or len(data[1:]) != ED_LEN + X_LEN + SIG_LEN:
             continue
 
@@ -192,7 +198,7 @@ async def main():
             Ed25519PublicKey.from_public_bytes(r_id).verify(r_sig, r_eph)
             peer_identity_pub, peer_eph_pub = r_id, r_eph
         except InvalidSignature:
-            print("[!] Ignored handshake with BAD signature.")
+            pass # ignore tampered packets
 
     # --- Fingerprint Verification ---
     fp = get_fingerprint(identity_pub, peer_identity_pub)
@@ -201,9 +207,17 @@ async def main():
     print(f"\n      {fp}\n")
     print("=" * 60)
 
-    if input("Does this match your peer? [y/N]: ").strip().lower() != "y":
+    def ask_yn():
+        return input("Does this match your peer? [y/N]: ").strip().lower()
+
+    # Call input in an executor so the bg_sender task keeps responding in the background
+    if (await loop.run_in_executor(None, ask_yn)) != "y":
         print("[!] Aborting. Treat this as a possible MITM.")
+        bg_sender.cancel()
         return
+
+    # User accepted, stop broadcasting handshakes
+    handshake_done.set()
 
     # --- Session Derivation ---
     shared = eph_priv.exchange(X25519PublicKey.from_public_bytes(peer_eph_pub))
@@ -237,7 +251,15 @@ async def main():
     async def receive_loop():
         while True:
             data = await q.get()
-            if not data or data[0] != PKT_CHAT or len(data) < 5:
+            if not data:
+                continue
+
+            if data[0] == PKT_HANDSHAKE:
+                # The peer is still handshaking (maybe they took longer to press 'y')
+                sendto_peer(handshake_pkt)
+                continue
+
+            if data[0] != PKT_CHAT or len(data) < 5:
                 continue
 
             seq = int.from_bytes(data[1:5], "little")
