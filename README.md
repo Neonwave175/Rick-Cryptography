@@ -15,7 +15,7 @@ Performance results (calculated on a M4 Max with a 14 core CPU and 32 core GPU)
 
 
 It is designed to not be multi-threadable by making each step rely on the previous. This helps in slowing down brute forcing. It is also very configurable with settings for time, iterations, base memory, matrix size, and length
-Read more in the /docs/RickPoW
+Read more in the /docs/RickPoW.md
 
 ## RickCrypt
 This is a encryption algorithm that uses RickPoW to generate the origin matrix and them uses ARX to generate the key stream.
@@ -24,11 +24,12 @@ Then it returns matrixes as the output
 
 Since this uses 2xRickPoW to generate the origin array, the generation of the origin array is slow.
 This is delebrate to reduce brute forcing
-Read more at /docs/RickCrypt
+Read more at /docs/RickCrypt.md
 
 ## RickChat
 This is a rick based chatting app that is based of UDP so there is no Client<->Server<->Client, only Peer<->Peer to reduce vulnarabilities
 It uses rick crypt so is very slow (3-6 seconds per message on Lo in a MacBook Pro M4 Max) but depending on the use case, this can be adjusted by changing the settings in RickCrypt
+Read more at /docs/RickChat.md
 
 
 ### License
