@@ -6,20 +6,19 @@
 
 ### RickPoW
 
-* **Description:**
-  * An Argon2-inspired hashing algorithm written in Python.
-  * Built to be as slow as possible.
-
+* **Description:** An Argon2-inspired hashing algorithm written in Python, built to be as slow as possible.
 * **Performance Results** *(calculated on an M4 Max with a 14 core CPU and 32 core GPU)*:
-  * **Settings `12:3:4:2`:** 23.42 CPU h/s | 10.0 GPU h/s — Small Matmuls so mlx overhead is high
-  * **Settings `12:3:128:2`:** 17.43 CPU h/s | 7.11 GPU h/s — Still same result
-  * **Settings `12:3:51200:96`:** 0.02 CPU h/s | 0.02 GPU h/s — Large matrix so mlx overhead becomes smaller of an issue
-  * **Settings `24:8:4:2`:** 9.42 CPU h/s | 3.15 GPU h/s — More iters
+
+| CPU h/s | GPU h/s | Settings | Comments |
+| ------- | ------- | -------- | -------- |
+| 23.42 | 10.0 | 12:3:4:2 | Small Matmuls so mlx overhead is high |
+| 17.43 | 7.11 | 12:3:128:2 | Still same result |
+| 0.02 | 0.02 | 12:3:51200:96 | Large matrix so mlx overhead becomes smaller of a issue |
+| 9.42 | 3.15 | 24:8:4:2 | More iters |
 
 * **Key Features & Design:**
   * Designed to **not be multi-threadable** by making each step rely on the previous, helping slow down brute forcing.
   * Highly configurable with settings for **time, iterations, base memory, matrix size, and length**.
-
 * **Documentation:** Read more in `/docs/RickPoW.md`
 
 ---
