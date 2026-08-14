@@ -1,32 +1,68 @@
+"""
+Secure P2P encrypted UDP chat.
+Requires: pip install cryptography mlx numpy --break-system-packages
+"""
 import asyncio
-import socket
+import base64
+import getpass
+import hashlib
+import os
+import struct
+import sys
 import traceback
 from concurrent.futures import ThreadPoolExecutor
-import numpy as np
+from pathlib import Path
+
 import mlx.core as mx
+import numpy as np
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
+
 from rickcrypt import decrypt, encrypt
 
-# rickcrypt/rick rely on a module-level global `rngseed` that is read AND
-# written by xoroshirosha128plus() throughout encrypt/decrypt. That makes
-# them non-thread-safe: if an encrypt() and a decrypt() ever run at the
-# same time on different threads (e.g. default asyncio executor, which
-# has multiple worker threads), they corrupt each other's state mid-call.
-# Routing every crypto call through this single-worker executor guarantees
-# they are always fully serialized within this process.
+# Serializes rickcrypt calls to prevent module-level global state corruption
 crypto_executor = ThreadPoolExecutor(max_workers=1)
 
+PKT_HANDSHAKE = 0x01
+PKT_CHAT = 0x02
+ED_LEN = X_LEN = 32
+SIG_LEN = 64
 
-def serialize_crypt(crypt_list):
-    parts = [len(crypt_list).to_bytes(4, 'little')]
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def h(*parts: bytes) -> bytes:
+    d = hashlib.blake2b(digest_size=32)
+    for p in parts:
+        d.update(p)
+    return d.digest()
+
+
+def derive_rickcrypt_keys(password: str) -> tuple[int, int, int]:
+    """Derives a deterministic (k1, k2, nonce) from a password."""
+    d = hashlib.blake2b(password.encode(), digest_size=24).digest()
+    return (
+        int.from_bytes(d[0:8], "little"),
+        int.from_bytes(d[8:16], "little"),
+        int.from_bytes(d[16:24], "little")
+    )
+
+
+def serialize_crypt(crypt_list: list) -> bytes:
+    parts = [len(crypt_list).to_bytes(4, "little")]
     for arr in crypt_list:
         parts.append(np.array(arr, dtype=np.uint64).tobytes())
     return b"".join(parts)
 
 
-def deserialize_crypt(data_bytes):
+def deserialize_crypt(data_bytes: bytes) -> list:
     if len(data_bytes) < 4:
         raise ValueError("Data too short")
-    num_chunks = int.from_bytes(data_bytes[:4], 'little')
+    num_chunks = int.from_bytes(data_bytes[:4], "little")
     crypt_list = []
     offset = 4
     chunk_size = 4 * 4 * 8
@@ -38,105 +74,216 @@ def deserialize_crypt(data_bytes):
     return crypt_list
 
 
-def nonce_for(base, seq):
-    # Counter-derived nonce: depends only on the seed + this message's
-    # sequence number, never on the plaintext of a previous message.
-    # This means a dropped or out-of-order packet can never desync the
-    # chain, and two directions can never race each other.
-    return (base + seq) & 0xFFFFFFFFFFFFFFFF
+# ---------------------------------------------------------------------------
+# Core Cryptography & Identity
+# ---------------------------------------------------------------------------
+
+def load_or_create_identity(path: Path, password: str) -> Ed25519PrivateKey:
+    """Loads or creates the long-term Ed25519 identity, encrypted at rest via rickcrypt."""
+    k1, k2, nonce = derive_rickcrypt_keys(password)
+
+    if path.exists():
+        try:
+            crypt_list = deserialize_crypt(path.read_bytes())
+            b64_str = decrypt(crypt_list, k1, k2, nonce)
+            raw = base64.b64decode(b64_str)
+            return Ed25519PrivateKey.from_private_bytes(raw)
+        except Exception as e:
+            print(f"[!] Failed to decrypt identity (wrong password?): {e}")
+            sys.exit(1)
+
+    print("[i] Generating new identity key...")
+    key = Ed25519PrivateKey.generate()
+    raw = key.private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    # Encrypt and save
+    b64_str = base64.b64encode(raw).decode("ascii")
+    encrypted_list = encrypt(b64_str, k1, k2, nonce)
+    path.write_bytes(serialize_crypt(encrypted_list))
+    os.chmod(path, 0o600)
+    return key
+
+
+class Ratchet:
+    """One-directional KDF chain for forward secrecy."""
+    def __init__(self, chain_key: bytes):
+        self.chain_key = chain_key
+
+    def step(self):
+        msg_key = h(self.chain_key, b"msg")
+        self.chain_key = h(self.chain_key, b"chain")
+        return (
+            int.from_bytes(msg_key[0:8], "little"),
+            int.from_bytes(msg_key[8:16], "little"),
+            int.from_bytes(msg_key[16:24], "little")
+        )
+
+
+def get_fingerprint(id_a: bytes, id_b: bytes) -> str:
+    lo, hi = sorted([id_a, id_b])
+    hexs = h(lo, hi, b"fingerprint")[:10].hex()
+    return " ".join(hexs[i:i + 4] for i in range(0, len(hexs), 4))
+
+
+# ---------------------------------------------------------------------------
+# Async UDP Protocol
+# ---------------------------------------------------------------------------
+
+class ChatProtocol(asyncio.DatagramProtocol):
+    def __init__(self, queue: asyncio.Queue):
+        self.queue = queue
+
+    def datagram_received(self, data: bytes, addr: tuple):
+        self.queue.put_nowait(data)
 
 
 async def main():
-    local_port = input("Local Port [default 5000]: ").strip()
-    local_port = int(local_port) if local_port else 5000
+    print("--- Secure P2P Chat Setup ---")
+    local_port = int(input("Local Port [default 5000]: ").strip() or 5000)
     peer_ip = input("Peer IP [default 127.0.0.1]: ").strip() or "127.0.0.1"
-    peer_port = input("Peer Port [default 5001]: ").strip()
-    peer_port = int(peer_port) if peer_port else 5001
-    k1 = int(input("Key 1 (64-bit int) [default 12345]: ").strip() or 12345)
-    k2 = int(input("Key 2 (64-bit int) [default 67890]: ").strip() or 67890)
-    seed = int(input("Nonce Seed [default 1337]: ").strip() or 1337)
+    peer_port = int(input("Peer Port [default 5001]: ").strip() or 5001)
+    pepper = input("Optional extra shared pepper (blank is fine): ").strip()
+    disk_pw = getpass.getpass("Local Identity Password: ")
 
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.bind(('', local_port))
-    s.setblocking(False)
+    # Identity
+    identity_path = Path(f"identity_{local_port}.key")
+    identity = load_or_create_identity(identity_path, disk_pw)
+    identity_pub = identity.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    print(f"[i] Identity active: {identity_pub.hex()[:16]}...")
 
-    q = asyncio.Queue()
+    # Ephemeral Keypair (Signed)
+    eph_priv = X25519PrivateKey.generate()
+    eph_pub = eph_priv.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    eph_sig = identity.sign(eph_pub)
+
+    # Networking Setup
     loop = asyncio.get_running_loop()
-    loop.add_reader(s.fileno(), lambda: q.put_nowait(s.recvfrom(65535)))
-
-    # Independent sequence counters per direction. No shared mutable
-    # nonce state between the send loop and receive() -> no race.
-    state = {"send_seq": 0, "recv_seq_expected": 0}
-
-    # Small out-of-order buffer in case UDP reorders packets and you
-    # want in-order printing. Optional -- comment out if you don't care.
-    pending = {}
-
-    def print_line(text):
-        print(f"\rPeer: {text}\n> ", end="", flush=True)
-
-    async def receive():
-        while True:
-            data, _ = await q.get()
-            seq = None
-            try:
-                if len(data) < 4:
-                    raise ValueError("Packet too short")
-                seq = int.from_bytes(data[:4], 'little')
-                body = data[4:]
-                crypt_list = deserialize_crypt(body)
-                n = nonce_for(seed, seq)
-                # Run the (slow) decrypt off the event loop so it can't
-                # block processing of the next incoming/outgoing packet.
-                msg_text = await loop.run_in_executor(
-                    crypto_executor, decrypt, crypt_list, k1, k2, n
-                )
-            except Exception as e:
-                msg_text = f"[Decryption Failed: {e}]"
-                print(f"\n[!] decrypt failed on seq={seq}:")
-                traceback.print_exc()
-
-            if seq is None:
-                # Couldn't even read a seq number -- nothing to order,
-                # just print immediately.
-                print_line(msg_text)
-                continue
-
-            # Buffer + print in seq order. Failures still occupy their
-            # slot so one bad/undecryptable packet can't permanently
-            # stall every later message behind it.
-            pending[seq] = msg_text
-            while state["recv_seq_expected"] in pending:
-                nxt = state["recv_seq_expected"]
-                print_line(pending.pop(nxt))
-                state["recv_seq_expected"] += 1
-
-    asyncio.create_task(receive())
-
-    print(
-        f"\n[+] Ready! Listening on port {local_port} -> Sending to {peer_ip}:{peer_port}"
+    q = asyncio.Queue()
+    transport, _ = await loop.create_datagram_endpoint(
+        lambda: ChatProtocol(q),
+        local_addr=("0.0.0.0", local_port)
     )
 
-    send_seq = 0
+    def sendto_peer(data: bytes):
+        transport.sendto(data, (peer_ip, peer_port))
+
+    # --- Handshake Phase ---
+    print("[+] Waiting for peer handshake...")
+    peer_identity_pub, peer_eph_pub = None, None
+
+    while not peer_identity_pub:
+        sendto_peer(bytes([PKT_HANDSHAKE]) + identity_pub + eph_pub + eph_sig)
+        try:
+            data = await asyncio.wait_for(q.get(), timeout=1.0)
+        except asyncio.TimeoutError:
+            continue
+
+        if not data or data[0] != PKT_HANDSHAKE or len(data[1:]) != ED_LEN + X_LEN + SIG_LEN:
+            continue
+
+        body = data[1:]
+        r_id, r_eph, r_sig = body[:ED_LEN], body[ED_LEN:ED_LEN + X_LEN], body[ED_LEN + X_LEN:]
+
+        try:
+            Ed25519PublicKey.from_public_bytes(r_id).verify(r_sig, r_eph)
+            peer_identity_pub, peer_eph_pub = r_id, r_eph
+        except InvalidSignature:
+            print("[!] Ignored handshake with BAD signature.")
+
+    # --- Fingerprint Verification ---
+    fp = get_fingerprint(identity_pub, peer_identity_pub)
+    print("\n" + "=" * 60)
+    print("  SAFETY NUMBER -- verify this OUT OF BAND before trusting:")
+    print(f"\n      {fp}\n")
+    print("=" * 60)
+
+    if input("Does this match your peer? [y/N]: ").strip().lower() != "y":
+        print("[!] Aborting. Treat this as a possible MITM.")
+        return
+
+    # --- Session Derivation ---
+    shared = eph_priv.exchange(X25519PublicKey.from_public_bytes(peer_eph_pub))
+    id_lo, id_hi = sorted([identity_pub, peer_identity_pub])
+    root = h(shared, id_lo, id_hi, pepper.encode())
+
+    send_ratchet = Ratchet(h(root, identity_pub, b"send"))
+    recv_ratchet = Ratchet(h(root, peer_identity_pub, b"send"))
+    print("[+] Verified. Forward-secret session established.\n")
+
+    # --- Receive Loop ---
+    state = {"send_seq": 0, "recv_seq_expected": 0}
+    pending_raw = {}
+
+    async def decrypt_one(seq: int, ct_body: bytes) -> str:
+        crypt_list = deserialize_crypt(ct_body)
+        k1, k2, nonce = recv_ratchet.step()
+
+        inner_str = await loop.run_in_executor(crypto_executor, decrypt, crypt_list, k1, k2, nonce)
+        inner_bytes = base64.b64decode(inner_str)
+        sig, plaintext = inner_bytes[:SIG_LEN], inner_bytes[SIG_LEN:]
+
+        # Verify Sign-Then-Encrypt binding
+        payload = struct.pack("<I", seq) + peer_identity_pub + identity_pub + plaintext
+        try:
+            Ed25519PublicKey.from_public_bytes(peer_identity_pub).verify(sig, payload)
+            return plaintext.decode(errors="replace")
+        except InvalidSignature:
+            return "[!! SIGNATURE INVALID -- dropped message !!]"
+
+    async def receive_loop():
+        while True:
+            data = await q.get()
+            if not data or data[0] != PKT_CHAT or len(data) < 5:
+                continue
+
+            seq = int.from_bytes(data[1:5], "little")
+            if seq < state["recv_seq_expected"]:
+                continue
+
+            pending_raw[seq] = data[5:]
+            while state["recv_seq_expected"] in pending_raw:
+                nxt_seq = state["recv_seq_expected"]
+                raw_ct = pending_raw.pop(nxt_seq)
+                try:
+                    text = await decrypt_one(nxt_seq, raw_ct)
+                except Exception as e:
+                    text = f"[Decryption Failed: {e}]"
+
+                print(f"\rPeer: {text}\n> ", end="", flush=True)
+                state["recv_seq_expected"] += 1
+
+    asyncio.create_task(receive_loop())
+
+    # --- Send Loop ---
     while True:
         msg = await loop.run_in_executor(None, input, "> ")
-        n = nonce_for(seed, send_seq)
-        try:
-            # Run encrypt off the event loop too -- this is what was
-            # letting a slow encrypt starve the receive() task before.
-            encrypted_list = await loop.run_in_executor(
-                crypto_executor, encrypt, msg, k1, k2, n
-            )
-            payload = send_seq.to_bytes(4, 'little') + serialize_crypt(encrypted_list)
-            s.sendto(payload, (peer_ip, peer_port))
-        except Exception:
-            print(f"[!] encrypt/send failed on seq={send_seq}:")
-            traceback.print_exc()
-            # Don't advance send_seq on failure -- keep sender/receiver
-            # sequence numbering in sync, and let you retry the message.
+        if not msg:
             continue
-        send_seq += 1
+
+        seq = state["send_seq"]
+        plaintext_bytes = msg.encode()
+
+        # Sign-Then-Encrypt binding
+        payload = struct.pack("<I", seq) + identity_pub + peer_identity_pub + plaintext_bytes
+        sig = identity.sign(payload)
+        inner_str = base64.b64encode(sig + plaintext_bytes).decode("ascii")
+
+        k1, k2, nonce = send_ratchet.step()
+        try:
+            encrypted_list = await loop.run_in_executor(crypto_executor, encrypt, inner_str, k1, k2, nonce)
+            pkt = bytes([PKT_CHAT]) + seq.to_bytes(4, "little") + serialize_crypt(encrypted_list)
+            sendto_peer(pkt)
+            state["send_seq"] += 1
+        except Exception as e:
+            print(f"[!] Send failed: {e}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nExiting.")

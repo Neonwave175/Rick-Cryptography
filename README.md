@@ -12,7 +12,13 @@ Performance results (calculated on a M4 Max with a 14 core CPU and 32 core GPU)
 |17.43|7.11|12:3:128:2|
 |0.02|0.02|12:3:51200:96|
 |9.42|3.15|24:8:4:2|
-## License
+It is designed to not be multi-threadable by making each step rely on the previous. This helps in slowing down brute forcing. It is also very configurable with settings for time, iterations, base memory, matrix size, and length
+Read more in the /docs/RickPoW
+
+## RickCrypt
+This is a encryption algorithm that uses RickPoW to generate the origin matrix and them uses ARX to generate the key stream
+
+### License
 Dual licenses under Apache 2.0 and GNU GPL v3
 >This is just a recommendation:
 I believe software (free or paid) should be open source.
