@@ -1,7 +1,3 @@
-"""
-Secure P2P encrypted UDP chat.
-Requires: pip install cryptography mlx numpy --break-system-packages
-"""
 import asyncio
 import base64
 import getpass
