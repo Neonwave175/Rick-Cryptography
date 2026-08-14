@@ -15,6 +15,7 @@ Performance results (calculated on a M4 Max with a 14 core CPU and 32 core GPU)
 
 
 It is designed to not be multi-threadable by making each step rely on the previous. This helps in slowing down brute forcing. It is also very configurable with settings for time, iterations, base memory, matrix size, and length
+
 Read more in the /docs/RickPoW.md
 
 ## RickCrypt
