@@ -18,7 +18,12 @@ It is designed to not be multi-threadable by making each step rely on the previo
 Read more in the /docs/RickPoW
 
 ## RickCrypt
-This is a encryption algorithm that uses RickPoW to generate the origin matrix and them uses ARX to generate the key stream
+This is a encryption algorithm that uses RickPoW to generate the origin matrix and them uses ARX to generate the key stream.
+It puts the input value into chunks then xors each value with the output array of the ARX like Xchacha
+Then it returns matrixes as the output
+
+Since this uses 2xRickPoW to generate the origin array, the generation of the origin array is slow.
+This is delebrate to reduce brute forcing
 
 ### License
 Dual licenses under Apache 2.0 and GNU GPL v3
