@@ -89,6 +89,7 @@ def step(mls, salt, iter, matrix):
         if tick % 4 == 1:
             h1 = (h1 * h_safe) % MOD
         elif tick % 4 == 2:
+            h = h1^h
             arint = (array_to_int(h))
             num_bytes = (arint.bit_length() + 7) // 8 or 1
             h_bytes = arint.to_bytes(num_bytes, byteorder="little")
