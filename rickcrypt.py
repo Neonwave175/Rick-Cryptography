@@ -32,7 +32,7 @@ def atpos(arr, x, y, val):
 def createar(key1, key2, nonce):
     val1 = xoroshirosha128plus(nonce) & 0xFFFFFFFFFFFFFFFF
     val2 = xoroshirosha128plus(nonce) & 0xFFFFFFFFFFFFFFFF
-    val3 = int.from_bytes(blake3(str(rick(str(xoroshirosha128plus(nonce ^ key2) & 0xFFFFFFFFFFFFFFFF), str(key1 ^ nonce), 12, 3, int(0.1*(1.049*10**6)), 8, 8)[1]).encode()).digest(length=8),'little')
+    val3 = int.from_bytes(blake3(str(rick(str(xoroshirosha128plus(nonce ^ key1) & 0xFFFFFFFFFFFFFFFF), str(key1 ^ nonce), 12, 3, int(0.1*(1.049*10**6)), 8, 8)[1]).encode()).digest(length=8),'little')
     val4 = int.from_bytes(blake3(str(rick(str(xoroshirosha128plus(nonce ^ key2) & 0xFFFFFFFFFFFFFFFF), str(key2 ^ nonce), 12, 3, int(0.1*(1.049*10**6)), 8, 8)[1]).encode()).digest(length=8),'little')
     ar = mx.array([
         [key1, key2, key1, key2],
