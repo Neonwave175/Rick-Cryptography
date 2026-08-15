@@ -21,7 +21,7 @@ def array_to_int(arr, bits_per_value=64):
 
 def xoroshirosha128plus(s0):
     global rngseed
-    rngseed ^= s0
+    rngseed ^= int.from_bytes(sha512((s0 & BIT_MASK_64).to_bytes(8, 'little')).digest()[:8],'little')
     if rngseed == 0:
         rngseed = 1
     s1 = rngseed
@@ -30,7 +30,7 @@ def xoroshirosha128plus(s0):
     s0_rot = ((s0 << 24) | (s0 >> (64 - 24))) & BIT_MASK_64
     s0 = (s0_rot ^ s1 ^ (s1 << 16)) & BIT_MASK_64
     s1 = ((s1 << 37) | (s1 >> (64 - 37))) & BIT_MASK_64
-    s1 = int.from_bytes(sha512((s1 ^ s0).to_bytes(8, 'little')).digest()[:8], 'little') & BIT_MASK_64
+    s1 = int.from_bytes(sha512((s0 ^ s1).to_bytes(8, 'little')).digest()[:8], 'little') & BIT_MASK_64
     result = (s0 + s1) & BIT_MASK_64
     return result
 
