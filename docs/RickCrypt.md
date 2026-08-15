@@ -50,12 +50,9 @@
   * val 4 is basically the same as val 3 but instead of key1 it is key2
   * Then we package it in a array with this format
 
-
+| C1 | C2 | C3 | C4 |
+|------|------|------|------|
 | key1 | key2 | key1 | key2 |
-|------|------|------|------|
 | nonce | nonce^val3 | nonce | nonce^val3 |
-|------|------|------|------|
-| key1 |val1 |key2 | val2 |
-|------|------|------|------|
+| key1 | val1 | key2 | val2 |
 | val3 | val4 | val3 | val4 |
-|------|------|------|------|
