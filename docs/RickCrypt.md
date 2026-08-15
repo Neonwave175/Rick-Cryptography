@@ -56,3 +56,17 @@
   | nonce | nonce^val3 | nonce | nonce^val3 |
   | key1 | val1 | key2 | val2 |
   | val3 | val4 | val3 | val4 |
+
+* **Output:** MLX array
+
+### `arx`:
+* **Inputs:** ara, arb, rev
+* **Working:** This is not the textbook arx, just add, rotate and xor. You can actually crack the keys if I did that due to a error in the logic
+  * ar(output array) is set to ara
+  * rotate ar by 24
+  * add ar and arb
+  * xor ara and ar
+  * xor arb and ar
+  * Hash this entire thing using blake3
+  * return ar
+*
