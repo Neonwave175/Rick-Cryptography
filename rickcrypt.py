@@ -36,7 +36,7 @@ def createar(key1, key2, nonce):
     val4 = int.from_bytes(blake3(str(rick(str(xoroshirosha128plus(nonce ^ key2) & 0xFFFFFFFFFFFFFFFF), str(key2 ^ nonce), 12, 3, int(0.1*(1.049*10**6)), 8, 8)[1]).encode()).digest(length=8),'little')
     ar = mx.array([
         [key1, key2, key1, key2],
-        [nonce, nonce, nonce, nonce],
+        [nonce, nonce^val3, nonce, nonce^val4],
         [key1, val1, key2, val2],
         [val3, val4, val3, val4],
     ], dtype=mx.uint64)
