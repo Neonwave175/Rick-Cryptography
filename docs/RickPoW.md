@@ -26,4 +26,5 @@
   * rotate s1 by 37
   * Sha512 s1^s0 and set that to s1
   * return s1+s0
+* **Why extra Sha512:** Xoroshiro128+ has been cracked and reversed so in theory if the hacker gets a rng number, they can reverse it to one chunk
 * **Output:** 64 bit int
