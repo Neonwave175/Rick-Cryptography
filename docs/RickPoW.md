@@ -16,7 +16,7 @@
 
 ## RNG
 
-### `xoroshirosha128plus`
+### `xoroshirosha128plus`:
 * **Input:** Seed0
 * **Working:** This is not a textbook Xoroshiro+ it has a extra sha step
   * XOR s0 by globalseed
@@ -26,5 +26,25 @@
   * rotate s1 by 37
   * Sha512 s1^s0 and set that to s1
   * return s1+s0
-* **Why extra Sha512:** Xoroshiro128+ has been cracked and reversed so in theory if the hacker gets a rng number, they can reverse it to one chunk
+* **Why extra Sha512:** Xoroshiro128+ has been cracked and reversed so in theory if the hacker gets a rng number, they can reverse it to one chunk. Also, it slows down the hacker
 * **Output:** 64 bit int
+
+## Main functions
+
+### `array`:
+* **Input:** string, previous array number, array size
+* **Working:** Converts a string to a array of a specified size
+  * encodes the given string into bytes
+  * creates a int variable of the entire contents
+  * Uses that values as a seed and generates random numbers and adds them to a list
+  * Then it takes that list, reshapes it into a square and outputs it
+* **Output:** array generated from the input string
+
+### `make_array`:
+* **Input:** memory ammount of the list, string input, matrix size, start value
+* **Working:** makes a list of arrays from a string that fits in the given memory
+  * Finds out the number of matrixes that can fit in a array of that length
+  * start with creating a array using the `array` function with the input of the string and the rnged stval
+  * for the next arrays, use the previous arrays as a stval by passing it through `array_to_int`
+  * Return a list with the generated arrays
+* **Output:** List of arrays
