@@ -62,7 +62,7 @@
   * Return h1 and update the rng seed
 * **Output:** one single array
 
-## Final Rick function (`rick`)
+## Final Rick function (`rick`):
 * **Input:** value, salt, time cost, iteration, memory, matrix size, length
 * **Working:** Main hashing function
   * Set default device to CPU
