@@ -71,9 +71,6 @@
   * return ar
 * **Output:** moddified array
 
-### `arx_np`:
-* Same as arx but in numpy to make it easier to encrypt files
-
 ### `encrypt_bytes`
 * **Input:** bytes, key1, key2, nonce, rounds
 * **Working:** encrypting logic
