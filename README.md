@@ -43,3 +43,9 @@
   * Uses RickCrypt, making it very slow (**3–6 seconds per message** on local host on a MacBook Pro M4 Max).
   * Settings in RickCrypt can be adjusted depending on the specific use case.
 * **Documentation:** Read more at `/docs/RickChat.md`
+
+
+
+## AI note:
+* I wrote most of the code here, Claude and Gemini only wrote the `rickchat.py` and its docs
+* All other docs and code was written by me
