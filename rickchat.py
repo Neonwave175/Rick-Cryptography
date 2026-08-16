@@ -29,6 +29,7 @@ PKT_HANDSHAKE = 0x01
 PKT_CHAT = 0x02
 ED_LEN = X_LEN = 32
 SIG_LEN = 64
+HASH_LEN = 32  # SHA-256 digest length
 
 
 # ---------------------------------------------------------------------------
@@ -40,6 +41,10 @@ def h(*parts: bytes) -> bytes:
     for p in parts:
         d.update(p)
     return d.digest()
+
+
+def sha256_digest(data: bytes) -> bytes:
+    return hashlib.sha256(data).digest()
 
 
 def derive_rickcrypt_keys(password: str) -> tuple[int, int, int]:
@@ -238,15 +243,24 @@ async def main():
 
         inner_str = await loop.run_in_executor(crypto_executor, decrypt, crypt_list, k1, k2, nonce)
         inner_bytes = base64.b64decode(inner_str)
-        sig, plaintext = inner_bytes[:SIG_LEN], inner_bytes[SIG_LEN:]
 
-        # Verify Sign-Then-Encrypt binding
+        # Layout: [sig (64)] [sha256 digest (32)] [plaintext...]
+        sig = inner_bytes[:SIG_LEN]
+        digest = inner_bytes[SIG_LEN:SIG_LEN + HASH_LEN]
+        plaintext = inner_bytes[SIG_LEN + HASH_LEN:]
+
+        # Verify Sign-Then-Encrypt binding (this alone already detects tampering)
         payload = struct.pack("<I", seq) + peer_identity_pub + identity_pub + plaintext
         try:
             Ed25519PublicKey.from_public_bytes(peer_identity_pub).verify(sig, payload)
-            return plaintext.decode(errors="replace")
         except InvalidSignature:
             return "[!! SIGNATURE INVALID -- dropped message !!]"
+
+        # Explicit SHA-256 tamper check on top of the signature
+        if sha256_digest(plaintext) != digest:
+            return "[!! SHA-256 MISMATCH -- message corrupted or tampered !!]"
+
+        return plaintext.decode(errors="replace")
 
     async def receive_loop():
         while True:
@@ -288,11 +302,14 @@ async def main():
 
         seq = state["send_seq"]
         plaintext_bytes = msg.encode()
+        digest = sha256_digest(plaintext_bytes)
 
         # Sign-Then-Encrypt binding
         payload = struct.pack("<I", seq) + identity_pub + peer_identity_pub + plaintext_bytes
         sig = identity.sign(payload)
-        inner_str = base64.b64encode(sig + plaintext_bytes).decode("ascii")
+
+        # Layout: [sig (64)] [sha256 digest (32)] [plaintext...]
+        inner_str = base64.b64encode(sig + digest + plaintext_bytes).decode("ascii")
 
         k1, k2, nonce = send_ratchet.step()
         try:
