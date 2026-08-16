@@ -49,3 +49,6 @@
 ## AI note:
 * I wrote most of the code here, Claude and Gemini only wrote the `rickchat.py` and its docs
 * All other docs and code was written by me
+
+## License:
+Dual licensed under Apache 2.0 and GNU GPL v3
