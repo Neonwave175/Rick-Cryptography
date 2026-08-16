@@ -95,7 +95,7 @@ def chunkyarray(s):
         arrays.append(c2a(chunks))
     return(arrays)
 
-def encrypt_bytes(b, k1, k2, n):
+def encrypt_bytes(b, k1, k2, n, r):
     global rngseed
     rngseed = 0
     val_bytes = urandom(8).hex().encode('utf-8') + b + urandom(8).hex().encode('utf-8')
@@ -104,121 +104,49 @@ def encrypt_bytes(b, k1, k2, n):
     origin = createar(k1, k2, n)
     prevx = origin
     for array in arrayls:
-        origin = arx(origin, prevx, 1024)
+        origin = arx(origin, prevx, r)
         newit = array.astype(mx.uint64) ^ origin
         mx.eval(newit)
         crypt.append(newit)
     return crypt
 
 def encrypt(v, k1, k2, n):
-    return encrypt_bytes(v.encode('utf-8'), k1, k2, n)
+    return encrypt_bytes(v.encode('utf-8'), k1, k2, n, 1024)
 
-def decrypt_bytes(crypt, k1, k2, n):
+def decrypt_bytes(crypt, k1, k2, n, r):
     global rngseed
     rngseed = 0
     origin = createar(k1, k2, n)
     prevx = origin
     decrypted_bytes = bytearray()
     for array in crypt:
-        origin = arx(origin, prevx, 1024)
+        origin = arx(origin, prevx, r)
         newit = (array ^ origin).astype(mx.uint8)
         mx.eval(newit)
         decrypted_bytes.extend(np.array(newit).flatten())
     return bytes(decrypted_bytes).rstrip(b'\x01')[16:-16]
 
 def decrypt(crypt, k1, k2, n):
-    return decrypt_bytes(crypt, k1, k2, n).decode('utf-8')
+    return decrypt_bytes(crypt, k1, k2, n, 1024).decode('utf-8')
 
 def encrypt_file(input_path, output_path, k1, k2, n):
-    global rngseed
-    rngseed = 0
-
-    origin = np.array(createar(k1, k2, n), dtype=np.uint64)
-    prevx = origin.copy()
-
-    prefix = urandom(16)
-
-    def chunk_generator():
-        yield prefix
-        with open(input_path, 'rb') as f:
-            while True:
-                chunk = f.read(16)
-                if not chunk:
-                    break
-                if len(chunk) == 16:
-                    yield chunk
-                else:
-                    padding_len = 16 - len(chunk)
-                    yield chunk + (b'\x01' * padding_len)
-        yield urandom(16)
-
-    # Local variable lookups for speed
-    local_arx_np = arx_np
-
-    with open(output_path, 'wb') as out_f:
-        buffer = bytearray()
-        for chunk in chunk_generator():
-            origin = local_arx_np(origin, prevx, 10)
-
-            origin_u8 = origin.astype(np.uint8)
-            chunk_arr = np.frombuffer(chunk, dtype=np.uint8).reshape(4, 4)
-            encrypted_chunk = chunk_arr ^ origin_u8
-
-            buffer.extend(encrypted_chunk.tobytes())
-            if len(buffer) >= 1024 * 1024:  # Write in 1MB chunks
-                out_f.write(buffer)
-                buffer.clear()
-        if buffer:
-            out_f.write(buffer)
+    with open(input_path, 'rb') as f:
+        data = f.read()
+    crypt = encrypt_bytes(data, k1, k2, n, 16)
+    with open(output_path, 'wb') as f:
+        for array in crypt:
+            f.write(np.array(array, dtype=np.uint64).tobytes())
 
 def decrypt_file(input_path, output_path, k1, k2, n):
-    global rngseed
-    rngseed = 0
-
-    origin = np.array(createar(k1, k2, n), dtype=np.uint64)
-    prevx = origin.copy()
-
-    # Local variable lookups for speed
-    local_arx_np = arx_np
-
-    with open(input_path, 'rb') as in_f, open(output_path, 'wb') as out_f:
-        buffer = []
-        write_buffer = bytearray()
-        is_first = True
-
+    crypt = []
+    with open(input_path, 'rb') as f:
         while True:
-            chunk = in_f.read(16)
+            chunk = f.read(128)  # 4x4 uint64 = 128 bytes per crypt block
             if not chunk:
                 break
-
-            origin = local_arx_np(origin, prevx, 10)
-
-            origin_u8 = origin.astype(np.uint8)
-            chunk_arr = np.frombuffer(chunk, dtype=np.uint8).reshape(4, 4)
-            decrypted_chunk = (chunk_arr ^ origin_u8).tobytes()
-
-            if is_first:
-                is_first = False
-                continue
-
-            buffer.append(decrypted_chunk)
-            if len(buffer) > 2:
-                # Pop the oldest block and write it (not the last content block or suffix)
-                oldest = buffer.pop(0)
-                write_buffer.extend(oldest)
-                if len(write_buffer) >= 1024 * 1024:
-                    out_f.write(write_buffer)
-                    write_buffer.clear()
-
-        # We are at the end of the stream.
-        # buffer[0] is the last content block (end of content + padding)
-        # buffer[1] is the suffix block (to be discarded)
-        if len(buffer) >= 2:
-            last_content = buffer[0].rstrip(b'\x01')
-            write_buffer.extend(last_content)
-
-        if write_buffer:
-            out_f.write(write_buffer)
+            crypt.append(mx.array(np.frombuffer(chunk, dtype=np.uint64).reshape(4, 4)))
+    with open(output_path, 'wb') as f:
+        f.write(decrypt_bytes(crypt, k1, k2, n, 16))
 
 if __name__ == "__main__":
     ran = int.from_bytes(urandom(8), 'little')
