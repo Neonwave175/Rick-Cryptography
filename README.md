@@ -51,4 +51,4 @@
 * All other docs and code was written by me
 
 ## License:
-Dual licensed under Apache 2.0 and GNU GPL v3
+Dual licensed under Apache 2.0 and GNU GPL v3.
