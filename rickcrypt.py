@@ -82,7 +82,7 @@ def c2a(chunkv):
     return mx.array(chunka, dtype=mx.uint8)
 
 def chunkify(s):
-    b = s.encode()
+    b = s.encode() if isinstance(s, str) else s
     chunks = []
     for i in range(0, len(b), 16):
         chunks.append(list(b[i:i+16]))
@@ -99,12 +99,7 @@ def encrypt_bytes(b, k1, k2, n):
     global rngseed
     rngseed = 0
     val_bytes = urandom(8).hex().encode('utf-8') + b + urandom(8).hex().encode('utf-8')
-    chunks = []
-    for i in range(0, len(val_bytes), 16):
-        chunks.append(list(val_bytes[i:i+16]))
-    arrayls = []
-    for chunks_list in chunks:
-        arrayls.append(c2a(chunks_list))
+    arrayls = chunkyarray(val_bytes)
     crypt = []
     origin = createar(k1, k2, n)
     prevx = origin
@@ -123,17 +118,13 @@ def decrypt_bytes(crypt, k1, k2, n):
     rngseed = 0
     origin = createar(k1, k2, n)
     prevx = origin
-    decrypted_bytes = []
+    decrypted_bytes = bytearray()
     for array in crypt:
         origin = arx(origin, prevx, 1024)
         newit = (array ^ origin).astype(mx.uint8)
         mx.eval(newit)
-        arr_np = np.array(newit)
-        decrypted_bytes.extend(arr_np.flatten().tolist())
-    full_bytes = bytes(decrypted_bytes)
-    full_bytes = full_bytes.rstrip(b'\x01')
-    message_bytes = full_bytes[16:-16]
-    return message_bytes
+        decrypted_bytes.extend(np.array(newit).flatten())
+    return bytes(decrypted_bytes).rstrip(b'\x01')[16:-16]
 
 def decrypt(crypt, k1, k2, n):
     return decrypt_bytes(crypt, k1, k2, n).decode('utf-8')
