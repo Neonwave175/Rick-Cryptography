@@ -59,22 +59,6 @@ def arx(ara, arb, rev):
         ar = mx.array(new_flat.reshape(4, 4))
     return ar
 
-def arx_np(ara, arb, rev):
-    # Ensure they are numpy arrays of uint64
-    ara = np.asarray(ara, dtype=np.uint64)
-    arb = np.asarray(arb, dtype=np.uint64)
-    ar = ara.copy()
-    for _ in range(rev):
-        ar = (ar << np.uint64(24)) | (ar >> np.uint64(40))
-        ar = ar + arb
-        ar = ara ^ ar
-        ar = arb ^ ar
-
-        data = ar.tobytes()
-        digest = blake3(data).digest(length=128)
-        ar = np.frombuffer(digest, dtype='<u8').copy().reshape(4, 4)
-    return ar
-
 def c2a(chunkv):
     chunka = mx.ones((4, 4))
     for tick, chunk in enumerate(chunkv):
