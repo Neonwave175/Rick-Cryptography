@@ -69,4 +69,41 @@
   * xor arb and ar
   * Hash this entire thing using blake3
   * return ar
-*
+* **Output:** moddified array
+
+### `arx_np`:
+* Same as arx but in numpy to make it easier to encrypt files
+
+### `encrypt_bytes`
+* **Input:** bytes, key1, key2, nonce, rounds
+* **Working:** encrypting logic
+  * Take in the value, add 8 byte paddings on both sides to reduce the cracking of known values
+  * Convert it into chunks
+  * Use create ar to create the origin key
+  * Then use arx to create a new value based on the origin, then xor the current chunk with the arx of the key
+  * For the next round, use the previous arx and arx it again to create a new kay, xor this and repeat this process untill all the chunks are encrypted
+* **Output:** List of MLX arrays
+
+### `decrypt_bytes`
+* **Input:** bytes, key1, key2, nonce, rounds
+* **Working:** encrypting logic
+  * Take the list of encrypted values
+  * Use create ar to create the origin key
+  * Then use arx to create a new value based on the origin, then xor the current chunk with the arx of the key
+  * For the next round, use the previous arx and arx it again to create a new kay, xor this and repeat this process untill all the chunks are decrypted
+  * Remove the padding
+* **Output:** Bytes
+
+## Packaging functions:
+
+### `encrypt`:
+Takes in a string, outputs crypt
+
+### `encrypt`:
+Takes in a crypt, outputs string
+
+### `encrypt_file`:
+Takes in a file, saves the output as a .rickcrypt file
+
+### `decrypt_file`:
+Takes in a .rickcrypt file, saves the output as a file
