@@ -1,5 +1,5 @@
 #!/bin/sh
-brew install python3
+brew install python3.14
 python3 -m venv .chatvenv
 source .chatvenv/bin/activate
 pip install mlx
