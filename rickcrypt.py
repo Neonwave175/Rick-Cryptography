@@ -119,16 +119,16 @@ def encrypt_file(input_path, output_path, k1, k2, n):
     crypt = encrypt_bytes(data, k1, k2, n, 16)
     with open(output_path, 'wb') as f:
         for array in crypt:
-            f.write(np.array(array, dtype=np.uint64).tobytes())
+            f.write(np.array(array, dtype=np.uint64).astype(np.uint8).tobytes())
 
 def decrypt_file(input_path, output_path, k1, k2, n):
     crypt = []
     with open(input_path, 'rb') as f:
         while True:
-            chunk = f.read(128)  # 4x4 uint64 = 128 bytes per crypt block
+            chunk = f.read(16)  # 4x4 uint8 = 16 bytes per crypt block
             if not chunk:
                 break
-            crypt.append(mx.array(np.frombuffer(chunk, dtype=np.uint64).reshape(4, 4)))
+            crypt.append(mx.array(np.frombuffer(chunk, dtype=np.uint8).reshape(4, 4)))
     with open(output_path, 'wb') as f:
         f.write(decrypt_bytes(crypt, k1, k2, n, 16))
 
