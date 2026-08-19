@@ -5,7 +5,6 @@ import hashlib
 import os
 import struct
 import sys
-import traceback
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
